@@ -1,0 +1,310 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(90, 90, 100, 0.25), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(60, 60, 70, 0.2), transparent 50%),
+    linear-gradient(160deg, #050505 0%, #17171c 45%, #2a2a32 100%);
+  background-attachment: fixed;
+  color: #f4f4f5;
+  min-height: 100vh;
+}
+
+.pg-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pg-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+/* --- Page ID entry screen --- */
+
+.pg-card {
+  width: 100%;
+  max-width: 460px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 36px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+}
+
+.pg-title {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pg-subtitle {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #a1a1aa;
+}
+
+.pg-form {
+  display: flex;
+  gap: 10px;
+}
+
+.pg-input {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f4f4f5;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pg-input::placeholder {
+  color: #6b6b74;
+}
+
+.pg-input:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+}
+
+.pg-input--error {
+  border-color: #f87171;
+}
+
+.pg-input--error:focus {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.25);
+}
+
+.pg-error {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #fca5a5;
+  line-height: 1.6;
+}
+
+.pg-button {
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  color: white;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.pg-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.pg-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pg-footnote {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #71717a;
+  line-height: 1.6;
+}
+
+.pg-code,
+.pg-mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: #d4d4d8;
+}
+
+/* --- Editor screen --- */
+
+.pg-screen--editor {
+  align-items: flex-start;
+  padding: 40px 24px;
+}
+
+.pg-editor-shell {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.pg-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pg-page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pg-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pg-ghost-button {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.pg-ghost-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Import modal --- */
+
+.pg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.pg-modal {
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(180deg, #1c1c22, #101013);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+
+.pg-modal-title {
+  margin: 0 0 18px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.pg-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pg-textarea {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f4f4f5;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pg-textarea:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+}
+
+.pg-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pg-editor-card {
+  background: linear-gradient(165deg, #232329 0%, #17171b 60%, #0c0c0e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  min-height: 400px;
+  padding: 8px;
+}
+
+.pg-editor-card :where(.bn-editor) {
+  background: transparent;
+  color: #e4e4e7;
+}
+
+.pg-footnote--editor {
+  text-align: center;
+  margin-top: 18px;
+}
+
+.pg-editor-status[data-docstar-status] {
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pg-editor-status[data-docstar-status="connecting"] {
+  color: #a1a1aa;
+}
+
+.pg-editor-status[data-docstar-status="error"] {
+  color: #fca5a5;
+}

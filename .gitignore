@@ -1,0 +1,6 @@
+node_modules
+dist
+.DS_Store
+playground/node_modules
+playground/dist
+*.tgz
