@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: website/package-lock.json
 
@@ -40,7 +40,16 @@ jobs:
           GITHUB_PAGES: "true"
         run: npm run build
 
+      # `enablement: true` tries to turn on Pages (with source = GitHub Actions)
+      # via the API if it isn't already — but the default GITHUB_TOKEN often
+      # lacks the permission to do that on a repo's first-ever Pages setup. If
+      # this step still fails with "Get Pages site failed" / "Not Found", it
+      # means it doesn't: go to the repo's Settings -> Pages -> Build and
+      # deployment -> Source, and set it to "GitHub Actions" manually (one-time,
+      # required before any workflow can deploy to Pages).
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
