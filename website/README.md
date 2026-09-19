@@ -1,8 +1,8 @@
 # docstar-editor website
 
 A static demo site for the `docstar-editor` package — a landing page plus a
-live, standalone editor (Playground + Import). Imports the package directly
-from `../src` (no build/pack step needed to try local changes).
+live, standalone editor (Playground + Import). Depends on the real published
+`docstar-editor` npm package, the same way any consumer would.
 
 This site is intentionally local-only/single-user: nothing here is synced to
 a server or persisted anywhere. Use Export to save your work as a Markdown
@@ -15,6 +15,20 @@ itself (via the `collab` prop) — this demo just doesn't wire up a server.
 npm install
 npm run dev
 ```
+
+### Iterating on the package itself
+
+To point this site at the local, unpublished `../src` instead of the
+published npm package (e.g. while developing a new `docstar-editor` feature),
+first `npm install` in the repo root so its own dependencies exist, then:
+
+```bash
+LOCAL_DOCSTAR_EDITOR=true npm run dev
+```
+
+Never build/deploy with `LOCAL_DOCSTAR_EDITOR` set — CI only installs
+`website/`'s own dependencies, and resolving to `../src` needs the root
+package's `node_modules` too.
 
 ## Build
 
