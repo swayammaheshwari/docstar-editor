@@ -27,6 +27,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       editable = true,
       theme = "light",
       transparent = false,
+      uploadFile,
     },
     ref
   ) {
@@ -91,9 +92,10 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
                   user: collab.user,
                 }
               : undefined,
+            uploadFile,
           }
-        : { initialContent: undefined },
-      [connection]
+        : { initialContent: undefined, uploadFile },
+      [connection, uploadFile]
     );
 
     const initialMarkdownLoaded = useMemo(() => ({ current: false }), [editor]);

@@ -39,6 +39,12 @@ export interface DocstarEditorProps {
   theme?: "light" | "dark";
   /** Makes the editor's own background transparent, so it blends into whatever container it's placed in instead of showing its own distinct panel color. */
   transparent?: boolean;
+  /**
+   * Called when a user pastes, drops, or selects a file (e.g. an image) into
+   * the editor. Should upload it and resolve to the URL to embed. If
+   * omitted, file/image upload is disabled (BlockNote's default behavior).
+   */
+  uploadFile?: (file: File) => Promise<string>;
 }
 
 export interface DocstarEditorHandle {
