@@ -10,27 +10,31 @@ export interface CollabConnection {
 /**
  * Opens a Yjs doc synced over a Hocuspocus-compatible WebSocket connection.
  *
- * With `workspaceId` set, `workspaceId`/`documentId` are composed into the
- * Hocuspocus documentName so persistence stays scoped per workspace, hitting
- * `${wsUrl}/workspace/${workspaceId}`, and `token` is forwarded for the
- * server's onAuthenticate hook to verify.
+ * `documentId` is always used verbatim as the Hocuspocus documentName — this
+ * function never prefixes or otherwise scopes it. If you want per-workspace
+ * document naming, compose that yourself before calling this (e.g.
+ * `documentId: \`${workspaceId}:${yourId}\``).
  *
- * Without `workspaceId`, `documentId` is used verbatim as the documentName
- * against `wsUrl` as-is (optionally with `wsParams` appended as query
- * params) — for connecting to a server that doesn't use workspace-scoped
- * routing.
+ * With `workspaceId` set, the connection hits `${wsUrl}/workspace/${workspaceId}`
+ * and `token` is forwarded for the server's onAuthenticate hook to verify.
+ * Without it, `documentId` is used verbatim against `wsUrl` as-is — for
+ * connecting to a server that doesn't use workspace-scoped routing.
+ *
+ * `wsParams` (e.g. extra identifying query params some servers expect) is
+ * appended in both cases.
  */
 export function connectProvider(config: CollabConfig): CollabConnection {
   const doc = new Y.Doc();
 
   const wsUrl = toWebSocketUrl(config.wsUrl);
-  const url = config.workspaceId
+  const base = config.workspaceId
     ? `${wsUrl.replace(/\/$/, "")}/workspace/${config.workspaceId}`
-    : appendParams(wsUrl, config.wsParams);
+    : wsUrl;
+  const url = appendParams(base, config.wsParams);
 
   const provider = new HocuspocusProvider({
     url,
-    name: config.workspaceId ? `${config.workspaceId}:${config.documentId}` : config.documentId,
+    name: config.documentId,
     // HocuspocusProvider only sends its Auth message when `token` is truthy
     // (see its `isAuthenticationRequired` getter), and the Hocuspocus server
     // core unconditionally queues every other incoming message until that

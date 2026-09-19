@@ -9,19 +9,16 @@ export interface CollabConfig {
   /** WebSocket URL of the Hocuspocus-compatible collaboration server, e.g. "wss://editor.docstar.io" */
   wsUrl: string;
   /**
-   * Identifies the document. With `workspaceId` set, this is scoped under it
-   * (`${workspaceId}:${documentId}`) and hits `${wsUrl}/workspace/${workspaceId}`.
-   * Without `workspaceId`, this is used verbatim as the Hocuspocus documentName
-   * against `wsUrl` as-is — for connecting to an existing/legacy server that
-   * doesn't use the workspace-scoped routing (e.g. `documentName` already
-   * equals a raw page id).
+   * The Hocuspocus documentName, used verbatim — never prefixed or otherwise
+   * scoped by this library. If you want per-workspace document naming,
+   * compose that yourself, e.g. `documentId: \`${workspaceId}:${yourId}\``.
    */
   documentId: string;
   /** Auth token issued for the workspace/session, sent to the server's onAuthenticate hook. Only meaningful with `workspaceId`. */
   token?: string;
-  /** The workspace this document belongs to. Omit to connect directly to `wsUrl` with `documentId` as the raw documentName. */
+  /** When set, connects to `${wsUrl}/workspace/${workspaceId}` instead of `wsUrl` directly, for servers with workspace-scoped auth routing. */
   workspaceId?: string;
-  /** Extra query params appended to `wsUrl` as-is (e.g. `{ orgId, userId }` for a legacy server). Ignored when `workspaceId` is set. */
+  /** Extra query params appended to the connection URL (e.g. `{ orgId, userId }` for a server that also wants legacy identifying params alongside workspace auth). */
   wsParams?: Record<string, string>;
   /** Local user's presence info shown to collaborators. */
   user: CollabUser;
