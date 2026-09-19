@@ -1,10 +1,19 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { useCreateBlockNote } from "@blocknote/react";
-import { BlockNoteView } from "@blocknote/mantine";
+import { BlockNoteView, lightDefaultTheme, darkDefaultTheme } from "@blocknote/mantine";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
+
+const transparentLightTheme = {
+  ...lightDefaultTheme,
+  colors: { ...lightDefaultTheme.colors, editor: { ...lightDefaultTheme.colors.editor, background: "transparent" } },
+};
+const transparentDarkTheme = {
+  ...darkDefaultTheme,
+  colors: { ...darkDefaultTheme.colors, editor: { ...darkDefaultTheme.colors.editor, background: "transparent" } },
+};
 
 type CollabStatus = "connecting" | "synced" | "error";
 
@@ -17,6 +26,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       className,
       editable = true,
       theme = "light",
+      transparent = false,
     },
     ref
   ) {
@@ -128,12 +138,18 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       );
     }
 
+    const resolvedTheme = transparent
+      ? theme === "dark"
+        ? transparentDarkTheme
+        : transparentLightTheme
+      : theme;
+
     return (
       <BlockNoteView
         editor={editor}
         editable={editable}
         className={className}
-        theme={theme}
+        theme={resolvedTheme}
         onChange={
           onChange
             ? () => {

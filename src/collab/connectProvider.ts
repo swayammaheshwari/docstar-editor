@@ -31,7 +31,16 @@ export function connectProvider(config: CollabConfig): CollabConnection {
   const provider = new HocuspocusProvider({
     url,
     name: config.workspaceId ? `${config.workspaceId}:${config.documentId}` : config.documentId,
-    token: config.token,
+    // HocuspocusProvider only sends its Auth message when `token` is truthy
+    // (see its `isAuthenticationRequired` getter), and the Hocuspocus server
+    // core unconditionally queues every other incoming message until that
+    // Auth message arrives — regardless of whether an onAuthenticate hook is
+    // even configured server-side. Without a token at all (the no-workspace
+    // path, which has no auth server-side either), the client never sends
+    // that message and the connection hangs forever with no event ever
+    // firing. A placeholder value keeps the handshake moving; the server
+    // only actually validates it when `workspaceId` requires auth.
+    token: config.token || "no-auth-required",
     document: doc,
   });
 

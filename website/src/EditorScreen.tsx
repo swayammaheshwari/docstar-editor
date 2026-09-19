@@ -1,13 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DocstarEditor, type DocstarEditorHandle } from "docstar-editor";
 import { ImportModal } from "./ImportModal";
 
 interface EditorScreenProps {
   pageId: string;
-  wsUrl: string;
-  token: string;
-  workspaceId: string;
-  onChangePage: () => void;
+  initialContent?: string;
+  onClose: () => void;
 }
 
 function downloadMarkdown(filename: string, content: string) {
@@ -22,15 +20,13 @@ function downloadMarkdown(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-export function EditorScreen({
-  pageId,
-  wsUrl,
-  token,
-  workspaceId,
-  onChangePage,
-}: EditorScreenProps) {
+export function EditorScreen({ pageId, initialContent, onClose }: EditorScreenProps) {
   const editorRef = useRef<DocstarEditorHandle>(null);
   const [importOpen, setImportOpen] = useState(false);
+
+  useEffect(() => {
+    editorRef.current?.focus();
+  }, []);
 
   const handleExport = async () => {
     if (!editorRef.current) return;
@@ -38,9 +34,9 @@ export function EditorScreen({
     downloadMarkdown(pageId, markdown);
   };
 
-  const handleImport = async (name: string, content: string) => {
+  const handleImport = async (content: string) => {
     if (!editorRef.current) return;
-    await editorRef.current.setMarkdown(`# ${name}\n\n${content}`);
+    await editorRef.current.setMarkdown(content);
     setImportOpen(false);
   };
 
@@ -49,7 +45,7 @@ export function EditorScreen({
       <div className="pg-editor-shell">
         <div className="pg-editor-header">
           <div>
-            <div className="pg-badge">docstar-editor · playground</div>
+            <div className="pg-badge">docstar-editor</div>
             <h2 className="pg-page-title">{pageId}</h2>
           </div>
           <div className="pg-header-actions">
@@ -59,8 +55,8 @@ export function EditorScreen({
             <button className="pg-ghost-button" onClick={handleExport}>
               ↓ Export
             </button>
-            <button className="pg-ghost-button" onClick={onChangePage}>
-              ← Change page
+            <button className="pg-ghost-button" onClick={onClose}>
+              ← Back
             </button>
           </div>
         </div>
@@ -70,22 +66,13 @@ export function EditorScreen({
             ref={editorRef}
             theme="dark"
             className="pg-editor-status"
-            collab={{
-              wsUrl,
-              token,
-              workspaceId,
-              documentId: pageId,
-              user: { name: "Playground", color: "#8b5cf6" },
-            }}
+            defaultMarkdown={initialContent}
           />
         </div>
 
         <div className="pg-footnote pg-footnote--editor">
-          Synced in real time via Hocuspocus at{" "}
-          <span className="pg-mono">
-            {wsUrl}/workspace/{workspaceId}
-          </span>{" "}
-          · document <span className="pg-mono">{workspaceId}:{pageId}</span>
+          Local, single-user editing — nothing here is synced or saved anywhere.
+          Use Export to save your work as a Markdown file.
         </div>
       </div>
 

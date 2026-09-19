@@ -40,6 +40,8 @@ export interface DocstarEditorProps {
   editable?: boolean;
   /** Visual theme. Defaults to "light". */
   theme?: "light" | "dark";
+  /** Makes the editor's own background transparent, so it blends into whatever container it's placed in instead of showing its own distinct panel color. */
+  transparent?: boolean;
 }
 
 export interface DocstarEditorHandle {

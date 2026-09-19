@@ -4,6 +4,22 @@
   "description": "A minimal block/markdown editor for React with optional real-time collaboration.",
   "license": "MIT",
   "author": "",
+  "keywords": [
+    "editor",
+    "markdown",
+    "blocknote",
+    "react",
+    "collaboration",
+    "yjs"
+  ],
+  "homepage": "https://swayammaheshwari.github.io/docstar-editor/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/swayammaheshwari/docstar-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/swayammaheshwari/docstar-editor/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",

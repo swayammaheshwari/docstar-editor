@@ -308,3 +308,138 @@ body {
 .pg-editor-status[data-docstar-status="error"] {
   color: #fca5a5;
 }
+
+/* --- Import file upload --- */
+
+.pg-import-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pg-file-input-hidden {
+  display: none;
+}
+
+.pg-error-inline {
+  font-size: 12px;
+  color: #fca5a5;
+}
+
+/* --- Site header / landing page --- */
+
+.pg-site {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pg-site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 32px;
+  flex-wrap: wrap;
+}
+
+.pg-site-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pg-site-logo {
+  color: #8b5cf6;
+}
+
+.pg-site-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pg-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 24px 100px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.pg-hero-title {
+  margin: 8px 0 16px;
+  font-size: clamp(32px, 6vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.pg-hero-accent {
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.pg-hero-subtitle {
+  margin: 0 0 32px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: #a1a1aa;
+  max-width: 560px;
+}
+
+.pg-hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 64px;
+}
+
+.pg-button--large {
+  padding: 14px 24px;
+  font-size: 15px;
+}
+
+.pg-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.pg-feature-card {
+  text-align: left;
+  padding: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.pg-feature-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.pg-feature-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #a1a1aa;
+}
+
+.pg-site-footer {
+  text-align: center;
+  padding: 24px;
+  color: #71717a;
+  font-size: 13px;
+}
