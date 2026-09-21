@@ -3,3 +3,57 @@
   border-radius: 8px;
   padding: 8px;
 }
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.alert[data-alert-type="warning"] {
+  background-color: #fff6e6;
+  border: 1px solid #e69819;
+}
+.alert[data-alert-type="error"] {
+  background-color: #ffe6e6;
+  border: 1px solid #d80d0d;
+}
+.alert[data-alert-type="info"] {
+  background-color: #e6ebff;
+  border: 1px solid #507aff;
+}
+.alert[data-alert-type="success"] {
+  background-color: #e6ffe6;
+  border: 1px solid #0bc10b;
+}
+
+.alert-icon-wrapper {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+.alert-icon[data-alert-icon-type="warning"] {
+  color: #e69819;
+}
+.alert-icon[data-alert-icon-type="error"] {
+  color: #d80d0d;
+}
+.alert-icon[data-alert-icon-type="info"] {
+  color: #507aff;
+}
+.alert-icon[data-alert-icon-type="success"] {
+  color: #0bc10b;
+}
+
+.inline-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 1.5em;
+  line-height: 1.5;
+  cursor: text;
+}

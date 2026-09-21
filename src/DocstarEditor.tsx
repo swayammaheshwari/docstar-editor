@@ -1,10 +1,67 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { useCreateBlockNote } from "@blocknote/react";
+import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
+import { insertOrUpdateBlockForSlashMenu, filterSuggestionItems } from "@blocknote/core/extensions";
+import { withCollaboration } from "@blocknote/core/yjs";
+import {
+  useCreateBlockNote,
+  SuggestionMenuController,
+  getDefaultReactSlashMenuItems,
+} from "@blocknote/react";
 import { BlockNoteView, lightDefaultTheme, darkDefaultTheme } from "@blocknote/mantine";
+import { MdError } from "react-icons/md";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
+import { Alert } from "./blocks/alert";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
+
+// BlockNote's markdown exporter runs every block through `toExternalHTML`
+// then a generic HTML->Markdown conversion, which silently unwraps unknown
+// custom elements (no "raw HTML passthrough" the way e.g. `marked` does) —
+// so a `<alert>` element written there is dropped entirely. To get a
+// literal `<alert>...</alert>` wrapper in the output markdown, replace
+// each alert block with a plain paragraph whose inline text content
+// already contains the literal wrapper tags before serializing — paragraph
+// text content is emitted verbatim, unlike custom block HTML. Must match
+// doc-rtc's server-side `wrapAlertBlocksForMarkdown` exactly, since both
+// write the same on-disk format.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wrapAlertBlocksForMarkdown = (blocks: readonly any[]): any[] =>
+  blocks.map((block) => {
+    const children = block.children?.length ? wrapAlertBlocksForMarkdown(block.children) : block.children;
+    if (block.type !== "alert") {
+      return children === block.children ? block : { ...block, children };
+    }
+    return {
+      ...block,
+      type: "paragraph",
+      props: {},
+      children,
+      content: [
+        { type: "text", text: "<alert>", styles: {} },
+        ...(Array.isArray(block.content) ? block.content : []),
+        { type: "text", text: "</alert>", styles: {} },
+      ],
+    };
+  });
+
+const schema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    alert: Alert(),
+  },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const insertAlert = (editor: any) => ({
+  title: "Alert",
+  subtext: "Highlight important information",
+  onItemClick: () =>
+    insertOrUpdateBlockForSlashMenu(editor, { type: "alert" as const }),
+  aliases: ["alert", "notice", "warning", "error", "info", "success"],
+  group: "Basic blocks",
+  icon: <MdError size={18} />,
+});
 
 const transparentLightTheme = {
   ...lightDefaultTheme,
@@ -83,18 +140,17 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
     }, [collab?.wsUrl, collab?.documentId, collab?.token]);
 
     const editor = useCreateBlockNote(
-      collab
-        ? {
-            collaboration: connection
-              ? {
-                  provider: connection.provider,
-                  fragment: connection.doc.getXmlFragment("default"),
-                  user: collab.user,
-                }
-              : undefined,
+      collab && connection
+        ? withCollaboration({
+            schema,
             uploadFile,
-          }
-        : { initialContent: undefined, uploadFile },
+            collaboration: {
+              provider: { awareness: connection.provider.awareness ?? undefined },
+              fragment: connection.doc.getXmlFragment("default"),
+              user: { name: collab.user.name, color: collab.user.color },
+            },
+          })
+        : { schema, initialContent: undefined, uploadFile },
       [connection, uploadFile]
     );
 
@@ -105,17 +161,17 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       if (initialMarkdownLoaded.current) return;
       if (!defaultMarkdown) return;
       initialMarkdownLoaded.current = true;
-      editor.tryParseMarkdownToBlocks(defaultMarkdown).then((blocks) => {
-        editor.replaceBlocks(editor.document, blocks);
-      });
+      const blocks = editor.tryParseMarkdownToBlocks(defaultMarkdown);
+      editor.replaceBlocks(editor.document, blocks);
     }, [collab, defaultMarkdown, editor, initialMarkdownLoaded]);
 
     useImperativeHandle(
       ref,
       () => ({
-        getMarkdown: () => editor.blocksToMarkdownLossy(editor.document),
+        getMarkdown: () =>
+          Promise.resolve(editor.blocksToMarkdownLossy(wrapAlertBlocksForMarkdown(editor.document))),
         setMarkdown: async (markdown: string) => {
-          const blocks = await editor.tryParseMarkdownToBlocks(markdown);
+          const blocks = editor.tryParseMarkdownToBlocks(markdown);
           editor.replaceBlocks(editor.document, blocks);
         },
         focus: () => editor.focus(),
@@ -152,16 +208,24 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
         editable={editable}
         className={className}
         theme={resolvedTheme}
+        slashMenu={false}
         onChange={
           onChange
             ? () => {
-                editor.blocksToMarkdownLossy(editor.document).then((markdown) => {
-                  onChange(markdown, editor.document);
-                });
+                const markdown = editor.blocksToMarkdownLossy(wrapAlertBlocksForMarkdown(editor.document));
+                onChange(markdown, editor.document);
               }
             : undefined
         }
-      />
+      >
+        <SuggestionMenuController
+          triggerCharacter="/"
+          getItems={async (query) => {
+            const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor)];
+            return filterSuggestionItems(items, query);
+          }}
+        />
+      </BlockNoteView>
     );
   }
 );
