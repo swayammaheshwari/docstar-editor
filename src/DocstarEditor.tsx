@@ -1,7 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
-import { insertOrUpdateBlockForSlashMenu, filterSuggestionItems } from "@blocknote/core/extensions";
-import { withCollaboration } from "@blocknote/core/yjs";
+import { BlockNoteSchema, defaultBlockSpecs, insertOrUpdateBlock, filterSuggestionItems } from "@blocknote/core";
 import {
   useCreateBlockNote,
   SuggestionMenuController,
@@ -38,7 +36,7 @@ const wrapAlertBlocksForMarkdown = (blocks: readonly any[]): any[] =>
       props: {},
       children,
       content: [
-        { type: "text", text: "<alert>", styles: {} },
+        { type: "text", text: `<alert type="${block.props?.type ?? "warning"}">`, styles: {} },
         ...(Array.isArray(block.content) ? block.content : []),
         { type: "text", text: "</alert>", styles: {} },
       ],
@@ -57,7 +55,7 @@ const insertAlert = (editor: any) => ({
   title: "Alert",
   subtext: "Highlight important information",
   onItemClick: () =>
-    insertOrUpdateBlockForSlashMenu(editor, { type: "alert" as const }),
+    insertOrUpdateBlock(editor, { type: "alert" as const }),
   aliases: ["alert", "notice", "warning", "error", "info", "success"],
   group: "Basic blocks",
   icon: <MdError size={18} />,
@@ -140,16 +138,18 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
     }, [collab?.wsUrl, collab?.documentId, collab?.token]);
 
     const editor = useCreateBlockNote(
-      collab && connection
-        ? withCollaboration({
+      collab
+        ? {
             schema,
+            collaboration: connection
+              ? {
+                  provider: connection.provider,
+                  fragment: connection.doc.getXmlFragment("default"),
+                  user: collab.user,
+                }
+              : undefined,
             uploadFile,
-            collaboration: {
-              provider: { awareness: connection.provider.awareness ?? undefined },
-              fragment: connection.doc.getXmlFragment("default"),
-              user: { name: collab.user.name, color: collab.user.color },
-            },
-          })
+          }
         : { schema, initialContent: undefined, uploadFile },
       [connection, uploadFile]
     );
