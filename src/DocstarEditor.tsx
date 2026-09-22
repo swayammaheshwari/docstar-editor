@@ -1,10 +1,92 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { useCreateBlockNote } from "@blocknote/react";
+import { BlockNoteSchema, defaultBlockSpecs, insertOrUpdateBlock, filterSuggestionItems } from "@blocknote/core";
+import {
+  useCreateBlockNote,
+  SuggestionMenuController,
+  getDefaultReactSlashMenuItems,
+} from "@blocknote/react";
 import { BlockNoteView, lightDefaultTheme, darkDefaultTheme } from "@blocknote/mantine";
+import { MdError, MdLink } from "react-icons/md";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
+import { Alert } from "./blocks/alert";
+import { PageLink } from "./blocks/pageLink";
+import { PageLinkSearchContext } from "./blocks/pageLinkContext";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
+
+// BlockNote's markdown exporter runs every block through `toExternalHTML`
+// then a generic HTML->Markdown conversion, which silently unwraps unknown
+// custom elements (no "raw HTML passthrough" the way e.g. `marked` does) —
+// so an `<alert>`/`<card>` element written there is dropped entirely. To get
+// a literal wrapper tag in the output markdown, replace each such block with
+// a plain paragraph whose inline text content already contains the literal
+// wrapper tags before serializing — paragraph text content is emitted
+// verbatim, unlike custom block HTML. Must match doc-rtc's server-side
+// `wrapCustomBlocksForMarkdown` exactly, since both write the same on-disk
+// format.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
+  blocks.map((block) => {
+    const children = block.children?.length ? wrapCustomBlocksForMarkdown(block.children) : block.children;
+    if (block.type === "alert") {
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children,
+        content: [
+          { type: "text", text: `<alert type="${block.props?.type ?? "warning"}">`, styles: {} },
+          ...(Array.isArray(block.content) ? block.content : []),
+          { type: "text", text: "</alert>", styles: {} },
+        ],
+      };
+    }
+    if (block.type === "pageLink") {
+      const { pageId, title, image } = block.props ?? {};
+      const imgTag = image ? `<img src="${image}"/>` : "";
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children,
+        content: [
+          { type: "text", text: `<card href="${pageId ?? ""}">${imgTag}${title ?? ""}</card>`, styles: {} },
+        ],
+      };
+    }
+    return children === block.children ? block : { ...block, children };
+  });
+
+const schema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    alert: Alert(),
+    pageLink: PageLink(),
+  },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const insertAlert = (editor: any) => ({
+  title: "Alert",
+  subtext: "Highlight important information",
+  onItemClick: () =>
+    insertOrUpdateBlock(editor, { type: "alert" as const }),
+  aliases: ["alert", "notice", "warning", "error", "info", "success"],
+  group: "Basic blocks",
+  icon: <MdError size={18} />,
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const insertPageLink = (editor: any) => ({
+  title: "Link to Page",
+  subtext: "Insert a card linking to another page",
+  onItemClick: () =>
+    insertOrUpdateBlock(editor, { type: "pageLink" as const }),
+  aliases: ["page", "link", "card", "pagelink"],
+  group: "Basic blocks",
+  icon: <MdLink size={18} />,
+});
 
 const transparentLightTheme = {
   ...lightDefaultTheme,
@@ -28,6 +110,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       theme = "light",
       transparent = false,
       uploadFile,
+      onSearchPages,
     },
     ref
   ) {
@@ -85,6 +168,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
     const editor = useCreateBlockNote(
       collab
         ? {
+            schema,
             collaboration: connection
               ? {
                   provider: connection.provider,
@@ -94,7 +178,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
               : undefined,
             uploadFile,
           }
-        : { initialContent: undefined, uploadFile },
+        : { schema, initialContent: undefined, uploadFile },
       [connection, uploadFile]
     );
 
@@ -105,17 +189,17 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       if (initialMarkdownLoaded.current) return;
       if (!defaultMarkdown) return;
       initialMarkdownLoaded.current = true;
-      editor.tryParseMarkdownToBlocks(defaultMarkdown).then((blocks) => {
-        editor.replaceBlocks(editor.document, blocks);
-      });
+      const blocks = editor.tryParseMarkdownToBlocks(defaultMarkdown);
+      editor.replaceBlocks(editor.document, blocks);
     }, [collab, defaultMarkdown, editor, initialMarkdownLoaded]);
 
     useImperativeHandle(
       ref,
       () => ({
-        getMarkdown: () => editor.blocksToMarkdownLossy(editor.document),
+        getMarkdown: () =>
+          Promise.resolve(editor.blocksToMarkdownLossy(wrapCustomBlocksForMarkdown(editor.document))),
         setMarkdown: async (markdown: string) => {
-          const blocks = await editor.tryParseMarkdownToBlocks(markdown);
+          const blocks = editor.tryParseMarkdownToBlocks(markdown);
           editor.replaceBlocks(editor.document, blocks);
         },
         focus: () => editor.focus(),
@@ -147,21 +231,31 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       : theme;
 
     return (
-      <BlockNoteView
-        editor={editor}
-        editable={editable}
-        className={className}
-        theme={resolvedTheme}
-        onChange={
-          onChange
-            ? () => {
-                editor.blocksToMarkdownLossy(editor.document).then((markdown) => {
+      <PageLinkSearchContext.Provider value={onSearchPages}>
+        <BlockNoteView
+          editor={editor}
+          editable={editable}
+          className={className}
+          theme={resolvedTheme}
+          slashMenu={false}
+          onChange={
+            onChange
+              ? () => {
+                  const markdown = editor.blocksToMarkdownLossy(wrapCustomBlocksForMarkdown(editor.document));
                   onChange(markdown, editor.document);
-                });
-              }
-            : undefined
-        }
-      />
+                }
+              : undefined
+          }
+        >
+          <SuggestionMenuController
+            triggerCharacter="/"
+            getItems={async (query) => {
+              const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor), insertPageLink(editor)];
+              return filterSuggestionItems(items, query);
+            }}
+          />
+        </BlockNoteView>
+      </PageLinkSearchContext.Provider>
     );
   }
 );

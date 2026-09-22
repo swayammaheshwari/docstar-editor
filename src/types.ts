@@ -1,5 +1,3 @@
-import type { Block } from "@blocknote/core";
-
 export interface CollabUser {
   name: string;
   color: string;
@@ -28,7 +26,8 @@ export interface DocstarEditorProps {
   /** Initial content as markdown. Ignored once `collab` is set and a document already exists on the server. */
   defaultMarkdown?: string;
   /** Fires on every content change with the current markdown and raw blocks. */
-  onChange?: (markdown: string, blocks: Block[]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onChange?: (markdown: string, blocks: any[]) => void;
   /** Enables real-time collaboration + server-side sync when provided. Omit for local, single-user mode. */
   collab?: CollabConfig;
   /** Optional extra class name for the editor container. */
@@ -45,6 +44,14 @@ export interface DocstarEditorProps {
    * omitted, file/image upload is disabled (BlockNote's default behavior).
    */
   uploadFile?: (file: File) => Promise<string>;
+  /**
+   * Called to search for pages the user can insert a "Link to Page" card
+   * for, as the user types in the card's page picker. Should resolve to the
+   * matching pages (empty query = suggest a default/recent list). If
+   * omitted, the "Link to Page" card can still be inserted but its picker
+   * shows no results.
+   */
+  onSearchPages?: (query: string) => Promise<{ id: string; title: string; image?: string }[]>;
 }
 
 export interface DocstarEditorHandle {
