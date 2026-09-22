@@ -57,3 +57,101 @@
   line-height: 1.5;
   cursor: text;
 }
+
+.page-link-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e2e2;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  background: none;
+}
+
+.page-link-card.has-image {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0 0 10px;
+  overflow: hidden;
+}
+
+.page-link-card-empty {
+  color: #757575;
+}
+
+.page-link-card-image {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+.page-link-card-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.page-link-card.has-image .page-link-card-title {
+  padding: 10px 12px 0;
+}
+
+.page-link-card-menu-trigger {
+  display: flex;
+  align-items: center;
+  color: #757575;
+}
+
+.page-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.page-link-picker-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-link-picker-status {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.page-link-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  width: 100%;
+  text-align: left;
+}
+
+.page-link-picker-item:hover {
+  background-color: #f2f2f2;
+}
+
+.page-link-picker-item-image {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.page-link-picker-item-icon {
+  flex-shrink: 0;
+  color: #757575;
+}
+
+.page-link-picker-item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
