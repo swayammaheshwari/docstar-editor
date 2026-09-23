@@ -1,5 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { BlockNoteSchema, defaultBlockSpecs, insertOrUpdateBlock, filterSuggestionItems } from "@blocknote/core";
+import {
+  BlockNoteSchema,
+  defaultBlockSpecs,
+  insertOrUpdateBlock,
+  filterSuggestionItems,
+} from "@blocknote/core";
 import {
   useCreateBlockNote,
   SuggestionMenuController,
@@ -13,6 +18,7 @@ import { connectProvider, type CollabConnection } from "./collab/connectProvider
 import { Alert } from "./blocks/alert";
 import { PageLink } from "./blocks/pageLink";
 import { PageLinkSearchContext } from "./blocks/pageLinkContext";
+import { codeBlock } from "./blocks/codeBlocks";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
 
 // BlockNote's markdown exporter runs every block through `toExternalHTML`
@@ -58,9 +64,14 @@ const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
     return children === block.children ? block : { ...block, children };
   });
 
+// `defaultBlockSpecs.codeBlock` is built via `createCodeBlockSpec()` with no
+// options — its language-picker <select> only renders when
+// `supportedLanguages` is populated, so out of the box the code block has no
+// language selection at all. Override it here with an explicit list.
 const schema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
+    codeBlock,
     alert: Alert(),
     pageLink: PageLink(),
   },
@@ -207,17 +218,31 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       [editor]
     );
 
+    // Always include "docstar-editor" as a base class, merged with whatever
+    // the caller passes — this package's own CSS (editor.css) targets
+    // `.docstar-editor` as an anchor selector (e.g. `.docstar-editor
+    // .bn-editor` to override BlockNote's own padding). Relying on the
+    // caller to pass that exact class name themselves is fragile: a caller
+    // that omits `className` (or passes something else) would silently get
+    // none of this package's own styling with no visible error.
+    const rootClassName = className ? `docstar-editor ${className}` : "docstar-editor";
+
     if (collab && status === "connecting") {
       return (
-        <div className={className} data-docstar-status="connecting">
-          Connecting…
+        <div className={rootClassName} data-docstar-status="connecting">
+          <div className="docstar-skeleton">
+            <div className="docstar-skeleton-line docstar-skeleton-heading" />
+            <div className="docstar-skeleton-line" />
+            <div className="docstar-skeleton-line" />
+            <div className="docstar-skeleton-line docstar-skeleton-short" />
+          </div>
         </div>
       );
     }
 
     if (collab && status === "error") {
       return (
-        <div className={className} data-docstar-status="error">
+        <div className={rootClassName} data-docstar-status="error">
           Couldn't connect to the collaboration server{error ? `: ${error}` : "."}
           {" "}Changes won't be saved until this reconnects.
         </div>
@@ -235,7 +260,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
         <BlockNoteView
           editor={editor}
           editable={editable}
-          className={className}
+          className={rootClassName}
           theme={resolvedTheme}
           slashMenu={false}
           onChange={
