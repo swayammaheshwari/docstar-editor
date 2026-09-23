@@ -1,6 +1,6 @@
 {
   "name": "docstar-editor",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "version_description": "link to page added",
   "description": "A minimal block/markdown editor for React with optional real-time collaboration.",
   "license": "MIT",
