@@ -64,6 +64,92 @@ const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
     return children === block.children ? block : { ...block, children };
   });
 
+// `wrapCustomBlocksForMarkdown` above is export-only — there's no matching
+// reverse direction. BlockNote's public block-spec API (as of 0.42.x) has no
+// `parseHTML`/markdown-import hook a custom block can register (only
+// `toExternalHTML`, used for non-markdown HTML export/copy-paste), and
+// `tryParseMarkdownToBlocks` is a generic, non-extensible markdown->blocks
+// conversion. So without this, loading exported markdown back in (via
+// `defaultMarkdown`/`setMarkdown`) hits BlockNote's own generic importer,
+// which recognizes the bare `<img>` inside our `<card>` text and silently
+// promotes it to one of BlockNote's own native image blocks (hence the
+// `"BlockNote image"` alt text — that's BlockNote's own default, not
+// anything we wrote), dropping the `<card>`/`<alert>` wrapper entirely.
+//
+// Fix: reverse the trick manually, token-based (same approach the hitman-api
+// migration script uses for embeds/cards) — swap each literal `<card>`/
+// `<alert>` paragraph for an inert placeholder BEFORE handing the markdown to
+// BlockNote's parser, then walk the resulting blocks and splice a real
+// `pageLink`/`alert` block back in wherever a placeholder landed.
+const CARD_LINE_REGEX = /^<card href="([^"]*)">(?:<img src="([^"]*)"\/>)?([\s\S]*?)<\/card>$/;
+const ALERT_LINE_REGEX = /^<alert type="([^"]*)">([\s\S]*?)<\/alert>$/;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CustomBlockToken =
+  | { type: "pageLink"; pageId: string; image: string; title: string }
+  | { type: "alert"; alertType: string; inner: string };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const unwrapCustomBlocksFromMarkdown = (markdown: string, editor: any): any[] => {
+  const tokens = new Map<string, CustomBlockToken>();
+  let tokenIndex = 0;
+
+  // Punctuation-free for the same reason the hitman-api converter's tokens
+  // are: a markdown serializer could otherwise escape characters inside the
+  // token (e.g. underscores), breaking the later exact-text match below.
+  const nextToken = () => `DOCSTARIMPORTTOKEN${tokenIndex++}ENDTOKEN`;
+
+  // Our exporter always writes each `<card>`/`<alert>` as its own standalone
+  // paragraph, separated by blank lines — split the same way to find them.
+  const segments = markdown.split(/\n\n+/);
+  const rewritten = segments.map((segment) => {
+    const trimmed = segment.trim();
+
+    const cardMatch = trimmed.match(CARD_LINE_REGEX);
+    if (cardMatch) {
+      const token = nextToken();
+      tokens.set(token, { type: "pageLink", pageId: cardMatch[1] ?? "", image: cardMatch[2] ?? "", title: (cardMatch[3] ?? "").trim() });
+      return token;
+    }
+
+    const alertMatch = trimmed.match(ALERT_LINE_REGEX);
+    if (alertMatch) {
+      const token = nextToken();
+      tokens.set(token, { type: "alert", alertType: alertMatch[1] ?? "warning", inner: alertMatch[2] ?? "" });
+      return token;
+    }
+
+    return segment;
+  });
+
+  const blocks = editor.tryParseMarkdownToBlocks(rewritten.join("\n\n"));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blockPlainText = (block: any): string =>
+    Array.isArray(block.content)
+      ? block.content.map((c: any) => (typeof c === "string" ? c : c?.text ?? "")).join("").trim()
+      : "";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return blocks.map((block: any) => {
+    const token = tokens.get(blockPlainText(block));
+    if (!token) return block;
+
+    if (token.type === "pageLink") {
+      return { type: "pageLink", props: { pageId: token.pageId, title: token.title, image: token.image } };
+    }
+
+    // The alert's inner text can carry rich inline formatting (the exporter
+    // writes the block's original inline-content array back out with
+    // markdown styling, e.g. `**bold**`) — re-parse it with BlockNote's own
+    // markdown parser rather than reinventing inline-markdown parsing, and
+    // lift the resulting inline content straight into the alert block.
+    const innerBlocks = editor.tryParseMarkdownToBlocks(token.inner.trim());
+    const content = innerBlocks[0]?.content ?? [];
+    return { type: "alert", props: { type: token.alertType }, content };
+  });
+};
+
 // `defaultBlockSpecs.codeBlock` is built via `createCodeBlockSpec()` with no
 // options — its language-picker <select> only renders when
 // `supportedLanguages` is populated, so out of the box the code block has no
@@ -200,7 +286,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       if (initialMarkdownLoaded.current) return;
       if (!defaultMarkdown) return;
       initialMarkdownLoaded.current = true;
-      const blocks = editor.tryParseMarkdownToBlocks(defaultMarkdown);
+      const blocks = unwrapCustomBlocksFromMarkdown(defaultMarkdown, editor);
       editor.replaceBlocks(editor.document, blocks);
     }, [collab, defaultMarkdown, editor, initialMarkdownLoaded]);
 
@@ -210,7 +296,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
         getMarkdown: () =>
           Promise.resolve(editor.blocksToMarkdownLossy(wrapCustomBlocksForMarkdown(editor.document))),
         setMarkdown: async (markdown: string) => {
-          const blocks = editor.tryParseMarkdownToBlocks(markdown);
+          const blocks = unwrapCustomBlocksFromMarkdown(markdown, editor);
           editor.replaceBlocks(editor.document, blocks);
         },
         focus: () => editor.focus(),
