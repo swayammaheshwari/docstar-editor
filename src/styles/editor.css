@@ -1,5 +1,35 @@
+/* Theme tokens for this package's own chrome (the page-link card and its
+   picker). These alias BlockNote's own theme variables, which
+   `applyBlockNoteCSSVariablesFromTheme` writes as inline styles onto the
+   editor root for whichever of light/dark is active — so the picker tracks
+   the editor's theme automatically instead of the hardcoded light values
+   (#e2e2e2 borders, an #f2f2f2 hover, #757575 muted text) these rules used
+   before, which is why it was close to unreadable in dark mode. Literal
+   fallbacks cover a consumer that renders the card outside a themed
+   BlockNoteView. Only the accent has no BlockNote equivalent, so it keys off
+   `data-docstar-theme`, which DocstarEditor sets from its own `theme` prop. */
 .docstar-editor {
   padding: 8px;
+
+  --dse-surface: var(--bn-colors-menu-background, #ffffff);
+  --dse-text: var(--bn-colors-menu-text, #1f1f1f);
+  --dse-text-muted: var(--bn-colors-disabled-text, #757575);
+  /* Deliberately NOT `var(--bn-colors-border)`: BlockNote's dark theme sets
+     that to #161616 against a #1f1f1f surface, which is invisible. This is
+     the same value the public page renders the card with — hitman-ui's
+     `linkedPageContent.scss` writes `var(--default-border-color, #e2e2e2)`
+     and never defines `--default-border-color`, so #e2e2e2 is what ships in
+     both themes there. Matching it keeps the internal and public cards
+     looking like the same component. */
+  --dse-border: #e2e2e2;
+  --dse-hover: var(--bn-colors-hovered-background, #f2f2f2);
+  --dse-radius: var(--bn-border-radius, 6px);
+  --dse-shadow: 0 6px 20px -6px var(--bn-colors-shadow, rgba(0, 0, 0, 0.35));
+  --dse-accent: #2563eb;
+}
+
+.docstar-editor[data-docstar-theme="dark"] {
+  --dse-accent: #60a5fa;
 }
 
 /* BlockNote's own .bn-editor hardcodes padding-inline: 54px, which reads as
@@ -100,85 +130,220 @@
   cursor: text;
 }
 
-.page-link-card {
+/* The alert box's own background is always a light pastel color
+   regardless of app theme (see the data-alert-type rules above, no dark
+   variant), but its text had no color of its own — it just inherited the
+   ambient editor text color, which in dark mode is a light gray, making
+   it nearly unreadable against the light background. Fixed to a color
+   that reads clearly against all four alert background colors. */
+.alert .inline-content {
+  color: #3f3f3f;
+}
+
+/* The page-link card and its picker. Every color goes through the tokens at
+   the top of this file so both themes are covered.
+
+   All of these are scoped under `.docstar-editor` on purpose: hitman-ui's
+   public page renderer styles the very same class names for published pages
+   (`.page-link-card` etc. in linkedPageContent.scss, produced by htmlUtils'
+   `card[href]` rewrite). Unscoped, whichever of the two stylesheets happened
+   to load last won on border/padding/margin/overflow. */
+.docstar-editor .page-link-shell {
+  position: relative;
+  width: 100%;
+}
+
+/* Geometry mirrors the public card (`.page-link-card` in hitman-ui's
+   linkedPageContent.scss) so the same link reads as the same object in the
+   editor and on the published page: same padding, radius, 4px block margin,
+   220px image cap, and an accent border on hover. */
+.docstar-editor .page-link-card {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid #e2e2e2;
-  border-radius: 6px;
-  cursor: pointer;
+  margin: 4px 0;
+  border: 1px solid var(--dse-border);
+  border-radius: var(--dse-radius);
+  cursor: default;
   text-align: left;
   background: none;
+  color: inherit;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.page-link-card.has-image {
+/* Only a card the host gave a navigator for (it gets `role="link"`) and the
+   empty-state picker button actually do something on click. */
+.docstar-editor .page-link-card-empty,
+.docstar-editor .page-link-card[role="link"] {
+  cursor: pointer;
+}
+
+.docstar-editor .page-link-card:hover {
+  border-color: var(--dse-accent);
+  background-color: var(--dse-hover);
+}
+
+.docstar-editor .page-link-card:focus-visible {
+  outline: 2px solid var(--dse-accent);
+  outline-offset: 2px;
+}
+
+/* The public card uses `overflow: hidden` here to clip the cover image to
+   the card's rounded corners. It can't be used in the editor: the kebab's
+   dropdown is rendered in-place (`withinPortal={false}`, required inside a
+   ProseMirror node view), so an `overflow: hidden` ancestor clips it out of
+   sight. Rounding the image's own top corners gets the same look without a
+   clipping context. */
+.docstar-editor .page-link-card.has-image {
   flex-direction: column;
   align-items: stretch;
   padding: 0 0 10px;
-  overflow: hidden;
 }
 
-.page-link-card-empty {
-  color: #757575;
+.docstar-editor .page-link-card.has-image .page-link-card-image {
+  border-top-left-radius: calc(var(--dse-radius) - 1px);
+  border-top-right-radius: calc(var(--dse-radius) - 1px);
 }
 
-.page-link-card-image {
+.docstar-editor .page-link-card-empty {
+  color: var(--dse-text-muted);
+}
+
+.docstar-editor .page-link-card-image {
   width: 100%;
-  max-height: 160px;
+  max-height: 220px;
   object-fit: cover;
 }
 
-.page-link-card-title {
+/* Title and kebab live in their own row. `has-image` turns the card itself
+   into a column, so without this wrapper the kebab dropped below the title
+   on any card with a cover image instead of sitting beside it. */
+.docstar-editor .page-link-card-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
   min-width: 0;
-  font-weight: 500;
 }
 
-.page-link-card.has-image .page-link-card-title {
+.docstar-editor .page-link-card.has-image .page-link-card-body {
   padding: 10px 12px 0;
 }
 
-.page-link-card-menu-trigger {
+.docstar-editor .page-link-card-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docstar-editor .page-link-card-menu-trigger {
   display: flex;
   align-items: center;
-  color: #757575;
+  flex-shrink: 0;
+  color: var(--dse-text-muted);
 }
 
-.page-link-picker {
+/* Anchored to `.page-link-shell` rather than portalled, so the panel stays
+   inside the node view — the same reason the Mantine version used
+   `withinPortal={false}`. */
+.docstar-editor .page-link-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 240px;
+  width: 320px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--dse-border);
+  border-radius: var(--dse-radius);
+  background-color: var(--dse-surface);
+  color: var(--dse-text);
+  box-shadow: var(--dse-shadow);
 }
 
-.page-link-picker-results {
-  display: flex;
-  flex-direction: column;
-}
-
-.page-link-picker-status {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0;
-}
-
-.page-link-picker-item {
+.docstar-editor .page-link-picker-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dse-border);
+}
+
+.docstar-editor .page-link-picker-search-icon {
+  flex-shrink: 0;
+  color: var(--dse-text-muted);
+}
+
+.docstar-editor .page-link-picker-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.docstar-editor .page-link-picker-input::placeholder {
+  color: var(--dse-text-muted);
+}
+
+/* Our own scroll container. This used to be a Mantine `ScrollArea.Autosize`
+   whose `mah` cap didn't take effect in the app build, so a long list simply
+   ran off the bottom of the screen with nothing to scroll. */
+.docstar-editor .page-link-picker-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+}
+
+.docstar-editor .page-link-picker-status {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--dse-text-muted);
+}
+
+.docstar-editor .page-link-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--dse-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
   text-align: left;
+  cursor: pointer;
 }
 
-.page-link-picker-item:hover {
-  background-color: #f2f2f2;
+/* The house highlighted-row idiom: accent left rule, tinted row, accent
+   text. Driven by `data-active` (set by both hover and the arrow keys) so
+   pointer and keyboard can never disagree about which row is selected. */
+.docstar-editor .page-link-picker-item[data-active="true"] {
+  border-left-color: var(--dse-accent);
+  background-color: var(--dse-hover);
+  color: var(--dse-accent);
 }
 
-.page-link-picker-item-image {
+.docstar-editor .page-link-picker-item-image {
   width: 24px;
   height: 24px;
   object-fit: cover;
@@ -186,14 +351,21 @@
   flex-shrink: 0;
 }
 
-.page-link-picker-item-icon {
+.docstar-editor .page-link-picker-item-icon {
   flex-shrink: 0;
-  color: #757575;
+  color: var(--dse-text-muted);
 }
 
-.page-link-picker-item-title {
+.docstar-editor .page-link-picker-item-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.docstar-editor .page-link-picker-footer {
+  padding: 7px 12px;
+  border-top: 1px solid var(--dse-border);
+  font-size: 11px;
+  color: var(--dse-text-muted);
 }

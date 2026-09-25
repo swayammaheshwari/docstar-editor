@@ -15,9 +15,11 @@ import { MdError, MdLink } from "react-icons/md";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
+import { markdownToBlocksPreservingCustomBlocks } from "./markdown/customBlocks";
+import { installSafeProsemirrorView } from "./editor/safeProsemirrorView";
 import { Alert } from "./blocks/alert";
 import { PageLink } from "./blocks/pageLink";
-import { PageLinkSearchContext } from "./blocks/pageLinkContext";
+import { PageLinkOpenContext, PageLinkSearchContext } from "./blocks/pageLinkContext";
 import { codeBlock } from "./blocks/codeBlocks";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
 
@@ -32,9 +34,47 @@ import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
 // `wrapCustomBlocksForMarkdown` exactly, since both write the same on-disk
 // format.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isEmptyInlineContent = (content: any): boolean =>
+  !Array.isArray(content) || content.length === 0 || content.every((node) => node?.type === "text" && !(node.text || "").trim());
+
+// `textColor`/`backgroundColor`/`underline` text styles have no CommonMark
+// representation at all (unlike bold/italic/strikethrough/code, which
+// export via native `**`/`_`/`~~`/`` ` `` syntax) — BlockNote's own export
+// pipeline drops them completely (confirmed: a styled run round-trips as
+// indistinguishable plain text) and even has a dedicated rehype plugin
+// (`removeUnderlinesRehypePlugin`) whose entire job is stripping `<u>`
+// before markdown conversion. Same "literal wrapper tag" technique as
+// alert/pageLink, but at the inline-content level instead of the block
+// level: `<span data-text-color="red" data-background-color="red">`/`<u>`
+// are both standard tags `marked` passes through untouched, and reusing
+// BlockNote's own `data-text-color`/`data-background-color` attribute
+// names means the public CSS can mirror its `[data-text-color="red"] {
+// color: #e03e3e }`-style rules directly instead of inventing new ones.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wrapStyledInlineContent = (content: any): any => {
+  if (!Array.isArray(content)) return content;
+  let changed = false;
+  const wrapped = content.map((node) => {
+    if (node?.type !== "text") return node;
+    const { textColor, backgroundColor, underline, ...restStyles } = node.styles ?? {};
+    if (!textColor && !backgroundColor && !underline) return node;
+    changed = true;
+    let text = node.text;
+    if (underline) text = `<u>${text}</u>`;
+    if (textColor || backgroundColor) {
+      const attrs = [textColor && `data-text-color="${textColor}"`, backgroundColor && `data-background-color="${backgroundColor}"`].filter(Boolean).join(" ");
+      text = `<span ${attrs}>${text}</span>`;
+    }
+    return { ...node, styles: restStyles, text };
+  });
+  return changed ? wrapped : content;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
   blocks.map((block) => {
     const children = block.children?.length ? wrapCustomBlocksForMarkdown(block.children) : block.children;
+    const content = wrapStyledInlineContent(block.content);
     if (block.type === "alert") {
       return {
         ...block,
@@ -43,7 +83,7 @@ const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
         children,
         content: [
           { type: "text", text: `<alert type="${block.props?.type ?? "warning"}">`, styles: {} },
-          ...(Array.isArray(block.content) ? block.content : []),
+          ...(Array.isArray(content) ? content : []),
           { type: "text", text: "</alert>", styles: {} },
         ],
       };
@@ -61,7 +101,101 @@ const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
         ],
       };
     }
-    return children === block.children ? block : { ...block, children };
+    if (block.type === "toggleListItem") {
+      // BlockNote's own external-HTML exporter degrades `toggleListItem`
+      // badly (groups it into a plain <ul>, and — since only list-item block
+      // types preserve nesting there — un-nests its `children` into flat
+      // sibling blocks with no marker of where the collapsible body starts
+      // or ends). Emit an explicit `<toggle-end>` marker block after the
+      // (recursively wrapped) children so the flattened body region stays
+      // recoverable, paired to its `<toggle-summary>` by `block.id` (unique
+      // per block) rather than by proximity — proximity alone breaks for a
+      // toggle nested inside another toggle's body, since the inner pair's
+      // markers appear before the outer's in the flattened sequence.
+      const toggleEndMarker = {
+        id: `${block.id}-toggle-end`,
+        type: "paragraph",
+        props: {},
+        children: [],
+        content: [{ type: "text", text: `<toggle-end data-toggle-id="${block.id}"></toggle-end>`, styles: {} }],
+      };
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children: [...(Array.isArray(children) ? children : []), toggleEndMarker],
+        content: [
+          { type: "text", text: `<toggle-summary data-toggle-id="${block.id}">`, styles: {} },
+          ...(Array.isArray(content) ? content : []),
+          { type: "text", text: "</toggle-summary>", styles: {} },
+        ],
+      };
+    }
+    if (block.type === "video" || block.type === "audio") {
+      // BlockNote's own markdown pipeline mangles both of these before we
+      // ever get a chance to intercept them: a `video` block's
+      // `toExternalHTML` emits a real `<video src>` element, which a
+      // dedicated rehype step (`convertVideoToMarkdownRehypePlugin`)
+      // rewrites into image syntax `![](url)` *before* markdown
+      // conversion — round-tripping to a broken `<img>` publicly, since a
+      // video file isn't a valid image source. An `audio` block's
+      // `toExternalHTML` emits a bare `<audio src>` with no text content,
+      // which hast-util-to-mdast's shared media handler falls back to
+      // "link to the resource" for, producing a markdown link with a
+      // *empty* label (`[](url)`) — an invisible, blank-looking link
+      // publicly. Neither ever reaches this function's block.type checks
+      // as literal HTML the way alert/pageLink do, because the mangling
+      // happens one layer deeper (in the HTML step this function's output
+      // still has to pass through), so — unlike alert/pageLink — this has
+      // to preempt that mangling by never producing a real <video>/<audio>
+      // element in the first place, going straight to a literal wrapper
+      // tag carrying the raw props instead.
+      const { url, name, caption } = block.props ?? {};
+      const tag = block.type === "video" ? "video-embed" : "audio-embed";
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children,
+        content: [
+          { type: "text", text: `<${tag} src="${url ?? ""}" data-name="${name ?? ""}" data-caption="${caption ?? ""}"></${tag}>`, styles: {} },
+        ],
+      };
+    }
+    if (block.type === "image" && block.props?.previewWidth) {
+      // A manually-resized image (dragging BlockNote's resize handle sets
+      // `previewWidth`) exports as plain `![alt](src)` — CommonMark image
+      // syntax has no way to encode a width, so it's silently dropped,
+      // and the public page falls back to the image's full intrinsic
+      // size. `toExternalHTML` does put the width onto the exported
+      // `<img>` element (@blocknote/core's Image/block.ts), but that's
+      // lost in the same HTML->Markdown step, same root cause as video/
+      // audio above. Only wrapped when actually resized — an image at
+      // its default size keeps exporting via the plain, already-working
+      // `![alt](src)` syntax untouched.
+      const { url, name, previewWidth } = block.props ?? {};
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children,
+        content: [{ type: "text", text: `<img src="${url ?? ""}" alt="${name ?? ""}" width="${previewWidth}"/>`, styles: {} }],
+      };
+    }
+    if (block.type === "paragraph" && isEmptyInlineContent(content)) {
+      // A genuinely empty paragraph (an author pressing Enter twice for a
+      // blank-line spacer) is silently dropped entirely by
+      // `blocksToMarkdownLossy` — not malformed, just gone, since markdown
+      // has no way to represent "an empty paragraph" distinct from "no
+      // paragraph at all." Giving it a single NBSP character survives the
+      // round-trip as an ordinary (if whitespace-only) paragraph.
+      return {
+        ...block,
+        children,
+        content: [{ type: "text", text: " ", styles: {} }],
+      };
+    }
+    return children === block.children && content === block.content ? block : { ...block, children, content };
   });
 
 // `defaultBlockSpecs.codeBlock` is built via `createCodeBlockSpec()` with no
@@ -108,6 +242,26 @@ const transparentDarkTheme = {
   colors: { ...darkDefaultTheme.colors, editor: { ...darkDefaultTheme.colors.editor, background: "transparent" } },
 };
 
+// `editor.prosemirrorView` is a getter for tiptap's view *proxy*, which is
+// always truthy but throws on any property access once the view is gone
+// ("[tiptap error]: The editor view is not available. Cannot access
+// view['dom']"). BlockNote's own `?.` guards around it therefore don't guard
+// anything, so anything that reaches the editor asynchronously has to check
+// first. Parsing markdown is async (it finishes through
+// `tryParseHTMLToBlocks`), so an editor that unmounts or is remounted under a
+// new React `key` while a parse is in flight — exactly what
+// `ChangelogTabContent.clearEditorContent` does, calling `setMarkdown('')` and
+// then changing the editor's key in the same handler — would otherwise have
+// `replaceBlocks` dispatch into a destroyed view.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isEditorViewAlive = (editor: any): boolean => {
+  try {
+    return !!editor?.prosemirrorView?.dom?.isConnected;
+  } catch {
+    return false;
+  }
+};
+
 type CollabStatus = "connecting" | "synced" | "error";
 
 export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>(
@@ -122,6 +276,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       transparent = false,
       uploadFile,
       onSearchPages,
+      onOpenPage,
     },
     ref
   ) {
@@ -193,15 +348,34 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       [connection, uploadFile]
     );
 
+    // Runs during render, before any BlockNoteView child can read the view.
+    useMemo(() => installSafeProsemirrorView(editor), [editor]);
+
     const initialMarkdownLoaded = useMemo(() => ({ current: false }), [editor]);
 
+    // `markdownToBlocksPreservingCustomBlocks` replaces BlockNote's
+    // `tryParseMarkdownToBlocks` on every import path. The built-in parser
+    // strips the literal wrapper tags `wrapCustomBlocksForMarkdown` writes
+    // (its remark pipeline discards raw HTML), so a `pageLink`/`alert`/toggle/
+    // video/audio block came back as a plain paragraph — the reason a
+    // page-link card silently turned into text on reload. It's async, unlike
+    // the synchronous built-in, because it finishes through
+    // `tryParseHTMLToBlocks`.
     useEffect(() => {
       if (collab) return; // collab documents load their content from the server
       if (initialMarkdownLoaded.current) return;
       if (!defaultMarkdown) return;
       initialMarkdownLoaded.current = true;
-      const blocks = editor.tryParseMarkdownToBlocks(defaultMarkdown);
-      editor.replaceBlocks(editor.document, blocks);
+      let cancelled = false;
+      markdownToBlocksPreservingCustomBlocks(defaultMarkdown, (html) =>
+        editor.tryParseHTMLToBlocks(html)
+      ).then((blocks) => {
+        if (cancelled || !isEditorViewAlive(editor)) return;
+        editor.replaceBlocks(editor.document, blocks);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, [collab, defaultMarkdown, editor, initialMarkdownLoaded]);
 
     useImperativeHandle(
@@ -210,7 +384,10 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
         getMarkdown: () =>
           Promise.resolve(editor.blocksToMarkdownLossy(wrapCustomBlocksForMarkdown(editor.document))),
         setMarkdown: async (markdown: string) => {
-          const blocks = editor.tryParseMarkdownToBlocks(markdown);
+          const blocks = await markdownToBlocksPreservingCustomBlocks(markdown, (html) =>
+            editor.tryParseHTMLToBlocks(html)
+          );
+          if (!isEditorViewAlive(editor)) return;
           editor.replaceBlocks(editor.document, blocks);
         },
         focus: () => editor.focus(),
@@ -257,11 +434,19 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
 
     return (
       <PageLinkSearchContext.Provider value={onSearchPages}>
+        <PageLinkOpenContext.Provider value={onOpenPage}>
         <BlockNoteView
           editor={editor}
           editable={editable}
           className={rootClassName}
           theme={resolvedTheme}
+          // BlockNoteView only forwards a *string* theme to Mantine's
+          // `data-mantine-color-scheme`; with the theme object `transparent`
+          // needs, it falls back to the system/context color scheme instead,
+          // which can disagree with the theme the host actually asked for.
+          // This carries the caller's own choice through verbatim for
+          // editor.css to key its accent color off.
+          data-docstar-theme={theme}
           slashMenu={false}
           onChange={
             onChange
@@ -276,10 +461,32 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
             triggerCharacter="/"
             getItems={async (query) => {
               const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor), insertPageLink(editor)];
-              return filterSuggestionItems(items, query);
+              // BlockNote renders one section per `group` and keys each
+              // section by the group name, so a group that appears in two
+              // non-adjacent runs yields duplicate React keys ("Encountered
+              // two children with the same key, `Basic blocks`") and React
+              // may drop or duplicate one of them. Both custom items above
+              // join "Basic blocks", which the default items already opened
+              // and closed, so regroup into contiguous runs — keeping each
+              // group in the position it first appeared — before filtering.
+              const order: string[] = [];
+              const byGroup = new Map<string, typeof items>();
+              for (const item of items) {
+                const group = item.group ?? "";
+                if (!byGroup.has(group)) {
+                  byGroup.set(group, []);
+                  order.push(group);
+                }
+                byGroup.get(group)!.push(item);
+              }
+              return filterSuggestionItems(
+                order.flatMap((group) => byGroup.get(group)!),
+                query
+              );
             }}
           />
         </BlockNoteView>
+        </PageLinkOpenContext.Provider>
       </PageLinkSearchContext.Provider>
     );
   }

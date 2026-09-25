@@ -52,6 +52,13 @@ export interface DocstarEditorProps {
    * shows no results.
    */
   onSearchPages?: (query: string) => Promise<{ id: string; title: string; image?: string }[]>;
+  /**
+   * Called when a user clicks a "Link to Page" card, with the linked page's
+   * id. Should navigate to that page. If omitted, the card renders as a
+   * static, non-clickable card — this package has no router of its own, so
+   * the host decides what a page id resolves to.
+   */
+  onOpenPage?: (pageId: string) => void;
 }
 
 export interface DocstarEditorHandle {
