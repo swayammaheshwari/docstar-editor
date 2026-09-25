@@ -387,8 +387,11 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
           const blocks = await markdownToBlocksPreservingCustomBlocks(markdown, (html) =>
             editor.tryParseHTMLToBlocks(html)
           );
-          if (!isEditorViewAlive(editor)) return;
+          // Reported rather than swallowed: a caller that tells the user the
+          // content was applied needs to know when it wasn't.
+          if (!isEditorViewAlive(editor)) return false;
           editor.replaceBlocks(editor.document, blocks);
+          return true;
         },
         focus: () => editor.focus(),
       }),

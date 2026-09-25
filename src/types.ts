@@ -64,8 +64,19 @@ export interface DocstarEditorProps {
 export interface DocstarEditorHandle {
   /** Serializes the current document to Markdown. */
   getMarkdown: () => Promise<string>;
-  /** Replaces the current document with the parsed content of a Markdown string. */
-  setMarkdown: (markdown: string) => Promise<void>;
+  /**
+   * Replaces the current document with the parsed content of a Markdown
+   * string. Raw HTML is accepted too and passes through the same importer,
+   * so either on-disk shape works.
+   *
+   * Resolves to `true` once the content has been applied, or `false` if the
+   * editor was torn down while the content was being parsed (parsing is
+   * asynchronous, so a caller can navigate away or remount mid-flight). It
+   * resolves rather than rejecting in that case because an unmount is not an
+   * error — but callers that report an outcome to the user must check it,
+   * since `false` means the document was left untouched.
+   */
+  setMarkdown: (markdown: string) => Promise<boolean>;
   /** Moves focus into the editor. */
   focus: () => void;
 }
