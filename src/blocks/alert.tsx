@@ -153,6 +153,18 @@ export const Alert = createReactBlockSpec(
         </div>
       );
     },
+    // Reads back the `<alert>` tag both exporters write. `toExternalHTML`
+    // below spells the type as `data-alert-type`, while
+    // `wrapCustomBlocksForMarkdown` writes the shorter `type` — accept
+    // either, since both end up on disk. Without this, reimporting an alert
+    // produced a plain paragraph holding its text (the behaviour
+    // `docs/docstar-editor.md` used to document as a known limitation).
+    parse: (element) => {
+      if (element.tagName !== "ALERT") return undefined;
+      const raw = element.getAttribute("data-alert-type") || element.getAttribute("type");
+      const match = alertTypes.find((alertType) => alertType.value === raw);
+      return { type: match ? match.value : "warning" };
+    },
     // Markdown has no native alert/admonition syntax, and BlockNote's
     // markdown exporter has no "raw HTML passthrough" for unrecognized
     // custom elements the way `marked` does (it silently unwraps them) —
