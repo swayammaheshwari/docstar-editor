@@ -369,3 +369,108 @@
   font-size: 11px;
   color: var(--dse-text-muted);
 }
+
+/* HTML/script embed block (blocks/htmlEmbed.tsx). The preview is a sandboxed
+   iframe sized from inside by postMessage, so it only needs width here. */
+.docstar-editor .html-embed-shell {
+  position: relative;
+  width: 100%;
+  margin: 4px 0;
+}
+
+.docstar-editor .html-embed-preview {
+  display: block;
+  width: 100%;
+  border: 1px dashed var(--dse-border);
+  border-radius: var(--dse-radius);
+  background: transparent;
+}
+
+.docstar-editor .html-embed-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--dse-border);
+  border-radius: var(--dse-radius);
+  background-color: var(--dse-surface);
+}
+
+.docstar-editor .html-embed-textarea {
+  width: 100%;
+  min-height: 120px;
+  box-sizing: border-box;
+  padding: 8px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--dse-text);
+  background: transparent;
+  border: 1px solid var(--dse-border);
+  border-radius: var(--dse-radius);
+  outline: none;
+}
+
+.docstar-editor .html-embed-textarea:focus {
+  border-color: var(--dse-accent);
+}
+
+.docstar-editor .html-embed-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.docstar-editor .html-embed-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--dse-text-muted);
+}
+
+.docstar-editor .html-embed-button {
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--dse-text);
+  background: transparent;
+  border: 1px solid var(--dse-border);
+  border-radius: var(--dse-radius);
+  cursor: pointer;
+}
+
+.docstar-editor .html-embed-button:hover:not(:disabled) {
+  background-color: var(--dse-hover);
+}
+
+.docstar-editor .html-embed-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.docstar-editor .html-embed-button-primary {
+  color: #ffffff;
+  background-color: var(--dse-accent);
+  border-color: var(--dse-accent);
+}
+
+.docstar-editor .html-embed-button-primary:hover:not(:disabled) {
+  background-color: var(--dse-accent);
+  opacity: 0.9;
+}
+
+/* Shown on hover only, so a finished embed reads as the widget itself. */
+.docstar-editor .html-embed-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  background-color: var(--dse-surface);
+  transition: opacity 0.15s;
+}
+
+.docstar-editor .html-embed-shell:hover .html-embed-edit,
+.docstar-editor .html-embed-edit:focus-visible {
+  opacity: 1;
+}

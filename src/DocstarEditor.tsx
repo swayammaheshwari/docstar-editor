@@ -11,14 +11,15 @@ import {
   getDefaultReactSlashMenuItems,
 } from "@blocknote/react";
 import { BlockNoteView, lightDefaultTheme, darkDefaultTheme } from "@blocknote/mantine";
-import { MdError, MdLink } from "react-icons/md";
+import { MdCode, MdError, MdLink } from "react-icons/md";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
-import { markdownToBlocksPreservingCustomBlocks } from "./markdown/customBlocks";
+import { encodeEmbedCode, markdownToBlocksPreservingCustomBlocks } from "./markdown/customBlocks";
 import { installSafeProsemirrorView } from "./editor/safeProsemirrorView";
 import { Alert } from "./blocks/alert";
 import { PageLink } from "./blocks/pageLink";
+import { HtmlEmbed } from "./blocks/htmlEmbed";
 import { PageLinkOpenContext, PageLinkSearchContext } from "./blocks/pageLinkContext";
 import { codeBlock } from "./blocks/codeBlocks";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
@@ -70,11 +71,35 @@ const wrapStyledInlineContent = (content: any): any => {
   return changed ? wrapped : content;
 };
 
+// Block-level `textColor`/`backgroundColor` props (the block menu's "Colors",
+// as opposed to coloring a selected text run) are dropped by
+// `blocksToMarkdownLossy` just like the inline styles above. Same literal
+// wrapper-tag technique, around the block's whole inline content, using a
+// tag of its own so readers can tell it apart from an inline color span:
+// the importer and the public renderer both hoist its attributes onto the
+// enclosing `<p>`/`<h1>`/... — the element BlockNote's own parser reads
+// `data-text-color`/`data-background-color` from.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wrapBlockColor = (block: any, content: any): any => {
+  if (!Array.isArray(content) || content.length === 0) return content;
+  const { textColor, backgroundColor } = block.props ?? {};
+  const attrs = [
+    textColor && textColor !== "default" && `data-text-color="${textColor}"`,
+    backgroundColor && backgroundColor !== "default" && `data-background-color="${backgroundColor}"`,
+  ].filter(Boolean);
+  if (attrs.length === 0) return content;
+  return [
+    { type: "text", text: `<block-color ${attrs.join(" ")}>`, styles: {} },
+    ...content,
+    { type: "text", text: "</block-color>", styles: {} },
+  ];
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
   blocks.map((block) => {
     const children = block.children?.length ? wrapCustomBlocksForMarkdown(block.children) : block.children;
-    const content = wrapStyledInlineContent(block.content);
+    const content = wrapBlockColor(block, wrapStyledInlineContent(block.content));
     if (block.type === "alert") {
       return {
         ...block,
@@ -99,6 +124,19 @@ const wrapCustomBlocksForMarkdown = (blocks: readonly any[]): any[] =>
         content: [
           { type: "text", text: `<card href="${pageId ?? ""}">${imgTag}${title ?? ""}</card>`, styles: {} },
         ],
+      };
+    }
+    if (block.type === "htmlEmbed") {
+      // Raw HTML/script can't go through markdown as-is (escaping, and the
+      // public renderer strips literal `<script>`), so it travels
+      // base64-encoded — see `encodeEmbedCode`.
+      const code = block.props?.code ?? "";
+      return {
+        ...block,
+        type: "paragraph",
+        props: {},
+        children,
+        content: code ? [{ type: "text", text: `<html-embed data-embed-code="${encodeEmbedCode(code)}"></html-embed>`, styles: {} }] : [],
       };
     }
     if (block.type === "toggleListItem") {
@@ -294,6 +332,7 @@ const schema = BlockNoteSchema.create({
     codeBlock,
     alert: Alert(),
     pageLink: PageLink(),
+    htmlEmbed: HtmlEmbed(),
   },
 });
 
@@ -317,6 +356,17 @@ const insertPageLink = (editor: any) => ({
   aliases: ["page", "link", "card", "pagelink"],
   group: "Basic blocks",
   icon: <MdLink size={18} />,
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const insertHtmlEmbed = (editor: any) => ({
+  title: "Embed HTML",
+  subtext: "Paste an HTML or script embed code",
+  onItemClick: () =>
+    insertOrUpdateBlock(editor, { type: "htmlEmbed" as const }),
+  aliases: ["embed", "html", "script", "iframe", "widget"],
+  group: "Basic blocks",
+  icon: <MdCode size={18} />,
 });
 
 const transparentLightTheme = {
@@ -551,7 +601,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
           <SuggestionMenuController
             triggerCharacter="/"
             getItems={async (query) => {
-              const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor), insertPageLink(editor)];
+              const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor), insertPageLink(editor), insertHtmlEmbed(editor)];
               // BlockNote renders one section per `group` and keys each
               // section by the group name, so a group that appears in two
               // non-adjacent runs yields duplicate React keys ("Encountered
