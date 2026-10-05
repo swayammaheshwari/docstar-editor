@@ -54,6 +54,7 @@ const BLOCK_LEVEL_TAGS = [
   "toggle-end",
   "video-embed",
   "audio-embed",
+  "html-embed",
 ];
 
 const UNWRAP_PARAGRAPH_RE = new RegExp(
@@ -72,8 +73,42 @@ const MEDIA_EMBED_RE = /<(video|audio)-embed\b([^>]*)><\/\1-embed>/g;
 const COLOR_SPAN_RE =
   /<span ((?:data-text-color="[^"]*"\s*)?(?:data-background-color="[^"]*"\s*)?)>([\s\S]*?)<\/span>/g;
 
+// `wrapBlockColor` marks a block's own color props with a `<block-color>`
+// tag around its inline content. BlockNote's parser reads those props off the
+// block's element itself, so move the attributes onto the enclosing
+// `<p>`/`<h1>`/`<li>` — for a list item, past the `<p>` remark adds in a
+// loose list and the checkbox `<input>` remark-gfm adds for a task item.
+// Anywhere else it degrades to an inline color span rather than being lost.
+const BLOCK_COLOR_HOIST_RE =
+  /<(p|h[1-6]|li)((?:\s[^>]*)?)>(\s*(?:<p>\s*)?(?:<input[^>]*>\s*)?)<block-color ([^>]*)>([\s\S]*?)<\/block-color>/g;
+const BLOCK_COLOR_RE = /<block-color ([^>]*)>([\s\S]*?)<\/block-color>/g;
+
 const TOGGLE_MARKER_RE =
   /<toggle-summary data-toggle-id="([^"]*)">([\s\S]*?)<\/toggle-summary>|<toggle-end data-toggle-id="([^"]*)"><\/toggle-end>/g;
+
+// An `htmlEmbed` block's raw HTML/script travels base64-encoded (of its
+// UTF-8 bytes) in a `data-embed-code` attribute (not `data-code`: BlockNote
+// reads every prop straight from a `data-<propName>` attribute, which would
+// hand the block its still-encoded value). Markdown would otherwise mangle it
+// (escaping `*`/`_`, reflowing newlines), and the public renderer strips every
+// literal `<script>` — base64's `A-Za-z0-9+/=` alphabet passes through both
+// untouched. `TextEncoder`/`btoa`/`atob` exist in browsers and in Node 20, so
+// the client and doc-rtc share this exactly.
+export const encodeEmbedCode = (code: string): string => {
+  let binary = "";
+  new TextEncoder().encode(code).forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+};
+
+export const decodeEmbedCode = (encoded: string): string => {
+  try {
+    return new TextDecoder().decode(Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0)));
+  } catch {
+    return "";
+  }
+};
 
 const getAttr = (attrs: string, name: string): string => {
   const match = new RegExp(`${name}="([^"]*)"`).exec(attrs);
@@ -124,6 +159,8 @@ export function normalizeCustomTagsHtml(html: string): string {
         `${figcaption}</figure>`
       );
     })
+    .replace(BLOCK_COLOR_HOIST_RE, "<$1$2 $4>$3$5")
+    .replace(BLOCK_COLOR_RE, "<span $1>$2</span>")
     .replace(COLOR_SPAN_RE, (match, attrs: string, content: string) => {
       const textColor = getAttr(attrs, "data-text-color");
       const backgroundColor = getAttr(attrs, "data-background-color");
