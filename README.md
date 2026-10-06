@@ -51,17 +51,15 @@ Connect the editor to your own Hocuspocus-compatible server (see [`doc-rtc`](../
 import { DocstarEditor } from "docstar-editor";
 
 export function Page() {
-  return (
-    <DocstarEditor
-      collab={{
-        wsUrl: "wss://your-server.example.com",
-        token: authToken,
-        workspaceId: "workspace-abc",
-        documentId: "doc-123",
-        user: { name: "Swayam", color: "#5b8def" },
-      }}
-    />
-  );
+  const collab = {
+    wsUrl: "wss://your-server.example.com",
+    token: authToken,
+    workspaceId: "workspace-abc",
+    documentId: "doc-123",
+    user: { name: "Swayam", color: "#5b8def" },
+  };
+
+  return <DocstarEditor collab={collab} />;
 }
 ```
 
