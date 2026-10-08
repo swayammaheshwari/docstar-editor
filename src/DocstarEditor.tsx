@@ -38,6 +38,15 @@ import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
 const isEmptyInlineContent = (content: any): boolean =>
   !Array.isArray(content) || content.length === 0 || content.every((node) => node?.type === "text" && !(node.text || "").trim());
 
+// Only BlockNote's named palette has public CSS (and a dark-mode variant).
+// Pasted HTML (Google Docs, Word, web pages) carries literal inline colors
+// like `rgb(0, 0, 0)`, which BlockNote stores verbatim as the color prop; if
+// exported they render as hard-coded black-on-transparent on the public
+// page, unreadable in dark mode. Treat anything outside the palette as
+// "default" so it follows the theme.
+const NAMED_COLORS = new Set(["gray", "brown", "red", "orange", "yellow", "green", "blue", "purple", "pink"]);
+const namedColor = (value: unknown): string | undefined => (typeof value === "string" && NAMED_COLORS.has(value) ? value : undefined);
+
 // `textColor`/`backgroundColor`/`underline` text styles have no CommonMark
 // representation at all (unlike bold/italic/strikethrough/code, which
 // export via native `**`/`_`/`~~`/`` ` `` syntax) — BlockNote's own export
@@ -57,7 +66,9 @@ const wrapStyledInlineContent = (content: any): any => {
   let changed = false;
   const wrapped = content.map((node) => {
     if (node?.type !== "text") return node;
-    const { textColor, backgroundColor, underline, ...restStyles } = node.styles ?? {};
+    const { textColor: rawTextColor, backgroundColor: rawBackgroundColor, underline, ...restStyles } = node.styles ?? {};
+    const textColor = namedColor(rawTextColor);
+    const backgroundColor = namedColor(rawBackgroundColor);
     if (!textColor && !backgroundColor && !underline) return node;
     changed = true;
     let text = node.text;
@@ -82,10 +93,11 @@ const wrapStyledInlineContent = (content: any): any => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const wrapBlockColor = (block: any, content: any): any => {
   if (!Array.isArray(content) || content.length === 0) return content;
-  const { textColor, backgroundColor } = block.props ?? {};
+  const textColor = namedColor(block.props?.textColor);
+  const backgroundColor = namedColor(block.props?.backgroundColor);
   const attrs = [
-    textColor && textColor !== "default" && `data-text-color="${textColor}"`,
-    backgroundColor && backgroundColor !== "default" && `data-background-color="${backgroundColor}"`,
+    textColor && `data-text-color="${textColor}"`,
+    backgroundColor && `data-background-color="${backgroundColor}"`,
   ].filter(Boolean);
   if (attrs.length === 0) return content;
   return [
@@ -392,7 +404,10 @@ const transparentDarkTheme = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isEditorViewAlive = (editor: any): boolean => {
   try {
-    return !!editor?.prosemirrorView?.dom?.isConnected;
+    const tiptap = editor?._tiptapEditor;
+    // The real view only — `prosemirrorView` falls back to a detached stub
+    // once the view is gone, so its `dom` can't be trusted to mean "alive".
+    return !!tiptap?.editorView && !tiptap.isDestroyed;
   } catch {
     return false;
   }
@@ -427,7 +442,10 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       const conn = connectProvider(collab);
       setConnection(conn);
 
-      const onSynced = () => setStatus("synced");
+      const onSynced = () => {
+        console.log(`[docstar-editor] Editor connected successfully (document: ${collab.documentId})`);
+        setStatus("synced");
+      };
       const onAuthenticationFailed = ({ reason }: { reason: string }) => {
         setStatus("error");
         setError(`Authentication failed: ${reason}`);
@@ -484,6 +502,44 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       [connection, uploadFile]
     );
 
+    useEffect(() => {
+      if (!collab) console.log("[docstar-editor] Editor connected successfully (standalone, no collaboration)");
+    }, [collab]);
+
+    // Google Docs (and most web sources) paste images as inline
+    // `data:image/...;base64,...` URLs, which BlockNote keeps verbatim as the
+    // image block's url — bloating the document by megabytes. Swap each for
+    // an uploaded URL via `uploadFile`. If the upload fails the base64 stays,
+    // so the image is never lost.
+    useEffect(() => {
+      if (!uploadFile || !editable) return;
+      const inFlight = new Set<string>();
+      const dataUrlToFile = async (dataUrl: string): Promise<File> => {
+        const blob = await (await fetch(dataUrl)).blob();
+        const ext = (blob.type.split("/")[1] || "png").replace("+xml", "");
+        return new File([blob], `pasted-image.${ext}`, { type: blob.type });
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const visit = (blocks: readonly any[]) => {
+        for (const block of blocks) {
+          const url: unknown = block.props?.url;
+          if (block.type === "image" && typeof url === "string" && url.startsWith("data:") && !inFlight.has(block.id)) {
+            inFlight.add(block.id);
+            dataUrlToFile(url)
+              .then(uploadFile)
+              .then((uploaded) => {
+                if (!isEditorViewAlive(editor)) return;
+                if (editor.getBlock(block.id)) editor.updateBlock(block.id, { props: { url: uploaded } });
+              })
+              .catch((err) => console.error("[docstar-editor] Failed to upload pasted image", err))
+              .finally(() => inFlight.delete(block.id));
+          }
+          if (block.children?.length) visit(block.children);
+        }
+      };
+      return editor.onChange(() => visit(editor.document));
+    }, [editor, uploadFile, editable]);
+
     // Runs during render, before any BlockNoteView child can read the view.
     useMemo(() => installSafeProsemirrorView(editor), [editor]);
 
@@ -527,7 +583,15 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
           );
           // Reported rather than swallowed: a caller that tells the user the
           // content was applied needs to know when it wasn't.
-          if (!isEditorViewAlive(editor)) return false;
+          if (!isEditorViewAlive(editor)) {
+            console.warn("[docstar-editor] setMarkdown: editor view unavailable", {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              hasView: !!(editor as any)?._tiptapEditor?.editorView,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              isDestroyed: (editor as any)?._tiptapEditor?.isDestroyed,
+            });
+            return false;
+          }
           editor.replaceBlocks(editor.document, blocks);
           return true;
         },
