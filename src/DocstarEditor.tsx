@@ -9,6 +9,9 @@ import {
   useCreateBlockNote,
   SuggestionMenuController,
   getDefaultReactSlashMenuItems,
+  FormattingToolbar,
+  FormattingToolbarController,
+  blockTypeSelectItems,
 } from "@blocknote/react";
 import { BlockNoteView, lightDefaultTheme, darkDefaultTheme } from "@blocknote/mantine";
 import { MdCode, MdError, MdLink } from "react-icons/md";
@@ -17,6 +20,16 @@ import "@blocknote/mantine/style.css";
 import { connectProvider, type CollabConnection } from "./collab/connectProvider";
 import { encodeEmbedCode, markdownToBlocksPreservingCustomBlocks } from "./markdown/customBlocks";
 import { installSafeProsemirrorView } from "./editor/safeProsemirrorView";
+import { uploadInlineDataUrls } from "./editor/inlineImages";
+import {
+  LEVEL_ONE_SLASH_KEYS,
+  demoteDocumentHeadings,
+  demoteLoadedHeadings,
+  demotePastedHeadings,
+  headingDictionary,
+  snapshotHeadings,
+  watchLevelOneHeadings,
+} from "./editor/headingLevels";
 import { Alert } from "./blocks/alert";
 import { PageLink } from "./blocks/pageLink";
 import { HtmlEmbed } from "./blocks/htmlEmbed";
@@ -338,6 +351,16 @@ const unwrapCustomBlocksFromMarkdown = (markdown: string, editor: any): any[] =>
 // options — its language-picker <select> only renders when
 // `supportedLanguages` is populated, so out of the box the code block has no
 // language selection at all. Override it here with an explicit list.
+// Pasted HTML that carries real document structure — preferred over the
+// clipboard's text/plain (see `pasteHandler`).
+const RICH_HTML = /<(h[1-6]|ul|ol|li|table|blockquote|strong|b|em|i|a|img)\b/i;
+
+// The toolbar's block-type select, without the level-1 heading — "Heading 1"
+// there is level 2 (see editor/headingLevels).
+const toolbarBlockTypes = blockTypeSelectItems(headingDictionary as any).filter(
+  (item) => !(item.type === "heading" && item.props?.level === 1)
+);
+
 const schema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
@@ -485,6 +508,27 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [collab?.wsUrl, collab?.documentId, collab?.token]);
 
+    // Rich HTML (from Claude, ChatGPT, Notion, Docs, the web) must win over
+    // text/plain: BlockNote otherwise parses the plain text as markdown
+    // whenever it merely *looks* like markdown (e.g. a "1. …\n2. …" line
+    // pair), which flattens headings, lists and paragraphs. HTML without real
+    // structure (code editors, raw markdown views) keeps the default.
+    //
+    // BlockNote only uploads clipboard `Files`; images inside pasted HTML keep
+    // their `data:` src. Re-host those once the default paste has run.
+    //
+    // Pasted headings move down a level, so a pasted h1 lands as Heading 1.
+    const pasteHandler = ({ event, editor, defaultPasteHandler }: any) => {
+      const html = event.clipboardData?.getData("text/html") ?? "";
+      const headingsBefore = snapshotHeadings(editor);
+      const handled = defaultPasteHandler({
+        prioritizeMarkdownOverHTML: !RICH_HTML.test(html),
+      });
+      demotePastedHeadings(editor, headingsBefore);
+      if (uploadFile) void uploadInlineDataUrls(editor, uploadFile);
+      return handled;
+    };
+
     const editor = useCreateBlockNote(
       collab
         ? {
@@ -497,8 +541,10 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
                 }
               : undefined,
             uploadFile,
+            pasteHandler,
+            dictionary: headingDictionary,
           }
-        : { schema, initialContent: undefined, uploadFile },
+        : { schema, initialContent: undefined, uploadFile, pasteHandler, dictionary: headingDictionary },
       [connection, uploadFile]
     );
 
@@ -506,39 +552,6 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       if (!collab) console.log("[docstar-editor] Editor connected successfully (standalone, no collaboration)");
     }, [collab]);
 
-    // Google Docs (and most web sources) paste images as inline
-    // `data:image/...;base64,...` URLs, which BlockNote keeps verbatim as the
-    // image block's url — bloating the document by megabytes. Swap each for
-    // an uploaded URL via `uploadFile`. If the upload fails the base64 stays,
-    // so the image is never lost.
-    useEffect(() => {
-      if (!uploadFile || !editable) return;
-      const inFlight = new Set<string>();
-      const dataUrlToFile = async (dataUrl: string): Promise<File> => {
-        const blob = await (await fetch(dataUrl)).blob();
-        const ext = (blob.type.split("/")[1] || "png").replace("+xml", "");
-        return new File([blob], `pasted-image.${ext}`, { type: blob.type });
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const visit = (blocks: readonly any[]) => {
-        for (const block of blocks) {
-          const url: unknown = block.props?.url;
-          if (block.type === "image" && typeof url === "string" && url.startsWith("data:") && !inFlight.has(block.id)) {
-            inFlight.add(block.id);
-            dataUrlToFile(url)
-              .then(uploadFile)
-              .then((uploaded) => {
-                if (!isEditorViewAlive(editor)) return;
-                if (editor.getBlock(block.id)) editor.updateBlock(block.id, { props: { url: uploaded } });
-              })
-              .catch((err) => console.error("[docstar-editor] Failed to upload pasted image", err))
-              .finally(() => inFlight.delete(block.id));
-          }
-          if (block.children?.length) visit(block.children);
-        }
-      };
-      return editor.onChange(() => visit(editor.document));
-    }, [editor, uploadFile, editable]);
 
     // Runs during render, before any BlockNoteView child can read the view.
     useMemo(() => installSafeProsemirrorView(editor), [editor]);
@@ -558,19 +571,28 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       if (initialMarkdownLoaded.current) return;
       if (!defaultMarkdown) return;
       initialMarkdownLoaded.current = true;
-      const blocks = unwrapCustomBlocksFromMarkdown(defaultMarkdown, editor);
+      const blocks = demoteLoadedHeadings(unwrapCustomBlocksFromMarkdown(defaultMarkdown, editor));
       editor.replaceBlocks(editor.document, blocks);
       let cancelled = false;
       markdownToBlocksPreservingCustomBlocks(defaultMarkdown, (html) =>
         editor.tryParseHTMLToBlocks(html)
       ).then((blocks) => {
         if (cancelled || !isEditorViewAlive(editor)) return;
-        editor.replaceBlocks(editor.document, blocks);
+        editor.replaceBlocks(editor.document, demoteLoadedHeadings(blocks));
       });
       return () => {
         cancelled = true;
       };
     }, [collab, defaultMarkdown, editor, initialMarkdownLoaded]);
+
+    // A collab document arrives from the server already in the editor, so an
+    // old page that still uses h1 is moved down a level here, once synced.
+    // From then on any level-1 heading that appears becomes Heading 1 (h2).
+    useEffect(() => {
+      if (collab && status !== "synced") return;
+      if (collab) demoteDocumentHeadings(editor);
+      return watchLevelOneHeadings(editor);
+    }, [collab, status, editor]);
 
     useImperativeHandle(
       ref,
@@ -592,7 +614,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
             });
             return false;
           }
-          editor.replaceBlocks(editor.document, blocks);
+          editor.replaceBlocks(editor.document, demoteLoadedHeadings(blocks));
           return true;
         },
         focus: () => editor.focus(),
@@ -653,6 +675,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
           // editor.css to key its accent color off.
           data-docstar-theme={theme}
           slashMenu={false}
+          formattingToolbar={false}
           onChange={
             onChange
               ? () => {
@@ -665,7 +688,12 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
           <SuggestionMenuController
             triggerCharacter="/"
             getItems={async (query) => {
-              const items = [...getDefaultReactSlashMenuItems(editor), insertAlert(editor), insertPageLink(editor), insertHtmlEmbed(editor)];
+              const items = [
+                ...getDefaultReactSlashMenuItems(editor).filter((item) => !LEVEL_ONE_SLASH_KEYS.has((item as { key?: string }).key ?? "")),
+                insertAlert(editor),
+                insertPageLink(editor),
+                insertHtmlEmbed(editor),
+              ];
               // BlockNote renders one section per `group` and keys each
               // section by the group name, so a group that appears in two
               // non-adjacent runs yields duplicate React keys ("Encountered
@@ -689,6 +717,9 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
                 query
               );
             }}
+          />
+          <FormattingToolbarController
+            formattingToolbar={() => <FormattingToolbar blockTypeSelectItems={toolbarBlockTypes} />}
           />
         </BlockNoteView>
         </PageLinkOpenContext.Provider>
