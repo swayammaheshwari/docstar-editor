@@ -1,7 +1,7 @@
 {
   "name": "docstar-editor",
-  "version": "0.4.2",
-  "version_description": "html/script embed block, block-level colors exported",
+  "version": "0.4.3",
+  "version_description": "pasted base64 images uploaded via uploadFile; rich pasted HTML preferred over markdown-looking plain text; page title is the only h1 (menu Heading 1 = h2)",
   "description": "A minimal block/markdown editor for React with optional real-time collaboration.",
   "license": "MIT",
   "author": "",

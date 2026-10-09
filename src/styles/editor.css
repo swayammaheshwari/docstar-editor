@@ -41,6 +41,35 @@
   padding-inline: 4px;
 }
 
+/* Block spacing closer to Claude's docs, so pasted content keeps its rhythm.
+   BlockNote gives every block the same 3px top and bottom padding (6px
+   between any two blocks), which reads as cramped prose. Padding adds up
+   between neighbours, so 6px each side gives 12px between paragraphs, while
+   list items keep 3px (6px between items). Headings get extra space above:
+   about 28px / 20px / 16px for Heading 1 / 2 / 3+ (levels 2 / 3 / 4-6) after
+   a paragraph. Mirrored on the public page in hitman-ui's
+   renderPageContent.scss. */
+.docstar-editor .bn-block-content[data-content-type="paragraph"] {
+  padding: 6px 0;
+}
+
+.docstar-editor .bn-block-content[data-content-type="heading"] {
+  padding: 10px 0 6px;
+}
+
+.docstar-editor .bn-block-content[data-content-type="heading"][data-level="2"] {
+  padding-top: 22px;
+}
+
+.docstar-editor .bn-block-content[data-content-type="heading"][data-level="3"] {
+  padding-top: 14px;
+}
+
+/* No extra space above the very first block, right under the page title. */
+.docstar-editor .bn-editor > .bn-block-group > .bn-block-outer:first-child > .bn-block > .bn-block-content {
+  padding-top: 3px;
+}
+
 .docstar-skeleton {
   display: flex;
   flex-direction: column;
