@@ -36,6 +36,7 @@ import { HtmlEmbed } from "./blocks/htmlEmbed";
 import { PageLinkOpenContext, PageLinkSearchContext } from "./blocks/pageLinkContext";
 import { codeBlock } from "./blocks/codeBlocks";
 import type { DocstarEditorHandle, DocstarEditorProps } from "./types";
+import { version as EDITOR_VERSION } from "../package.json";
 
 // BlockNote's markdown exporter runs every block through `toExternalHTML`
 // then a generic HTML->Markdown conversion, which silently unwraps unknown
@@ -466,7 +467,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
       setConnection(conn);
 
       const onSynced = () => {
-        console.log(`[docstar-editor] Editor connected successfully (document: ${collab.documentId})`);
+        console.log(`[docstar-editor] v${EDITOR_VERSION} Editor connected successfully (document: ${collab.documentId})`);
         setStatus("synced");
       };
       const onAuthenticationFailed = ({ reason }: { reason: string }) => {
@@ -549,7 +550,7 @@ export const DocstarEditor = forwardRef<DocstarEditorHandle, DocstarEditorProps>
     );
 
     useEffect(() => {
-      if (!collab) console.log("[docstar-editor] Editor connected successfully (standalone, no collaboration)");
+      if (!collab) console.log(`[docstar-editor] v${EDITOR_VERSION} Editor connected successfully (standalone, no collaboration)`);
     }, [collab]);
 
 
